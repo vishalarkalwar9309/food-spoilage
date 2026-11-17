@@ -204,8 +204,8 @@ def start_session(food_profile_id: str, session_name: Optional[str] = None, db_p
         INSERT INTO storage_sessions (
             session_name, food_profile_id, start_time, is_active,
             last_reading_time, accumulated_effective_hours, total_readings_count
-        ) VALUES (?, ?, ?, 1, ?, 0.0, 0);
-    """, (name, food_profile_id, now_iso, now_iso))
+        ) VALUES (?, ?, ?, 1, NULL, 0.0, 0);
+    """, (name, food_profile_id, now_iso))
 
     session_id = cur.lastrowid
     conn.commit()
