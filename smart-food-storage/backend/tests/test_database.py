@@ -2,6 +2,7 @@
 test_database.py
 Automated database tests for Smart Food Storage Spoilage Predictor.
 Tests SQLite schema, foreign keys, constraints, WAL mode, and session persistence.
+Updated for three selectable modes: Normal, Fruits and Snacks, and Rice.
 """
 
 import os
@@ -28,25 +29,25 @@ def temp_db():
 
 
 def test_init_db_and_profiles(temp_db):
-    """Verify tables exist and exactly 2 experimental profiles (rice and oranges) are seeded."""
+    """Verify tables exist and exactly 3 modes (normal, fruits_and_snacks, rice) are seeded."""
     profiles = database.get_all_food_profiles(temp_db)
-    assert len(profiles) == 2
+    assert len(profiles) == 3
     profile_ids = [p["id"] for p in profiles]
+    assert "normal" in profile_ids
+    assert "fruits_and_snacks" in profile_ids
     assert "rice" in profile_ids
-    assert "oranges" in profile_ids
 
 
 def test_session_lifecycle(temp_db):
     """Test starting, tracking, and ending storage sessions."""
-    # When initialized, default active session is created for rice
+    # When initialized, default active session is created
     active_init = database.get_active_session(temp_db)
     assert active_init is not None
-    assert active_init["food_profile_id"] == "rice"
 
     # Start new session
-    session = database.start_session("rice", "Test Batch 001", temp_db)
+    session = database.start_session("normal", "Test Batch 001", temp_db)
     assert session["id"] is not None
-    assert session["food_profile_id"] == "rice"
+    assert session["food_profile_id"] == "normal"
     assert session["is_active"] == 1
 
     active = database.get_active_session(temp_db)
@@ -106,13 +107,13 @@ def test_sensor_reading_and_risk_persistence(temp_db):
 
 def test_persistence_across_restart(temp_db):
     """Historical data remains intact across connection re-opens (simulating app restart)."""
-    session = database.start_session("oranges", "Oranges Cold Store", temp_db)
+    session = database.start_session("fruits_and_snacks", "Snacks Cold Store", temp_db)
     now_iso = datetime.now(timezone.utc).isoformat()
     database.insert_sensor_reading(
         device_id="DEV_01",
         source="simulator",
-        temperature=4.5,
-        humidity=88.0,
+        temperature=12.0,
+        humidity=60.0,
         gas=180.0,
         timestamp=now_iso,
         session_id=session["id"],
@@ -178,27 +179,26 @@ def test_out_of_order_timestamp_handling(temp_db):
 def test_get_previous_risk_for_session(temp_db):
     """Verify tracking of session-specific risk history for alert transitions."""
     s1 = database.start_session("rice", "Batch A", temp_db)
-    s2 = database.start_session("oranges", "Batch B", temp_db)
+    s2 = database.start_session("fruits_and_snacks", "Batch B", temp_db)
 
     # Initial risk for s2 is None
     assert database.get_previous_risk_for_session(s2["id"], temp_db) is None
 
     # Insert risk for s2
-    rid = database.insert_sensor_reading("D1", "esp32", 5.0, 88.0, 200.0, "2026-11-15T12:00:00Z", s2["id"], temp_db)
-    database.insert_risk_history(rid, s2["id"], "oranges", 0.0, 0.0, 10.0, 0.0, 2.5, "Low", "Optimal", "2026-11-15T12:00:00Z", temp_db)
+    rid = database.insert_sensor_reading("D1", "esp32", 12.0, 65.0, 200.0, "2026-11-15T12:00:00Z", s2["id"], temp_db)
+    database.insert_risk_history(rid, s2["id"], "fruits_and_snacks", 0.0, 0.0, 10.0, 0.0, 2.5, "Low", "Optimal", "2026-11-15T12:00:00Z", temp_db)
 
     assert database.get_previous_risk_for_session(s2["id"], temp_db) == "Low"
 
     # Insert High risk for s2
-    rid2 = database.insert_sensor_reading("D1", "esp32", 18.0, 70.0, 420.0, "2026-11-15T12:05:00Z", s2["id"], temp_db)
-    database.insert_risk_history(rid2, s2["id"], "oranges", 80.0, 50.0, 100.0, 1.0, 61.7, "High", "Stress", "2026-11-15T12:05:00Z", temp_db)
+    rid2 = database.insert_sensor_reading("D1", "esp32", 28.0, 40.0, 420.0, "2026-11-15T12:05:00Z", s2["id"], temp_db)
+    database.insert_risk_history(rid2, s2["id"], "fruits_and_snacks", 80.0, 50.0, 100.0, 1.0, 61.7, "High", "Stress", "2026-11-15T12:05:00Z", temp_db)
 
     assert database.get_previous_risk_for_session(s2["id"], temp_db) == "High"
 
 
 def test_empty_database_state_safety(temp_db):
     """Empty database state must return graceful null/empty responses without exception."""
-    # When newly initialized, active session is seeded for Rice, but readings and alerts are empty
     latest = database.get_latest_state(temp_db)
     assert latest is None
 

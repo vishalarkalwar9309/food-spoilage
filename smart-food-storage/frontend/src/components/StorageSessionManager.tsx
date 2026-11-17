@@ -19,7 +19,7 @@ export const StorageSessionManager: React.FC<StorageSessionManagerProps> = ({
 }) => {
   const [showModal, setShowModal] = useState<boolean>(false);
   const [sessionName, setSessionName] = useState<string>('');
-  const [selectedProfileId, setSelectedProfileId] = useState<string>(profiles[0]?.id || 'rice');
+  const [selectedProfileId, setSelectedProfileId] = useState<string>(profiles[0]?.id || 'normal');
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
 
   const handleStart = async (e: React.FormEvent) => {
@@ -201,7 +201,7 @@ export const StorageSessionManager: React.FC<StorageSessionManagerProps> = ({
                 <label className="block text-slate-300 mb-1 font-semibold">Batch / Session Label:</label>
                 <input
                   type="text"
-                  placeholder="e.g. Rice Storage Chamber Batch #1"
+                  placeholder="e.g. Normal Storage Chamber Batch #1"
                   value={sessionName}
                   onChange={(e) => setSessionName(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg bg-dark-800 border border-dark-700 text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"

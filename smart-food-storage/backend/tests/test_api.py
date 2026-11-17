@@ -1,8 +1,8 @@
 """
 test_api.py
 Automated integration tests for Flask REST endpoints.
-Verifies payloads, validation rules, risk calculation endpoints, alert escalation, and simulator operations.
-Updated for experimental commodities: Rice and Oranges.
+Verifies payloads, validation rules, risk calculation endpoints, alert escalation, simulator operations,
+and the three selectable food modes: Normal, Fruits and Snacks, and Rice.
 """
 
 import os
@@ -49,25 +49,102 @@ def test_health_endpoint(client):
 
 
 def test_food_profiles_endpoint(client):
+    """Verify exactly three selectable food modes: Normal, Fruits and Snacks, Rice."""
     res = client.get("/api/food-profiles")
     assert res.status_code == 200
     data = res.get_json()
-    assert data["count"] == 2
+    assert data["count"] == 3
     names = [p["name"] for p in data["profiles"]]
+    assert "Normal" in names
+    assert "Fruits and Snacks" in names
     assert "Rice" in names
-    assert "Oranges" in names
+    assert "Oranges" not in names
+
+
+def test_food_mode_get_and_post(client):
+    """Verify /api/food-mode endpoint for querying and switching active mode."""
+    # GET active mode
+    res_get = client.get("/api/food-mode")
+    assert res_get.status_code == 200
+    get_data = res_get.get_json()
+    assert "active_mode" in get_data
+    assert "available_modes" in get_data
+    assert len(get_data["available_modes"]) == 3
+
+    # Switch to Normal mode (-15%)
+    res_normal = client.post("/api/food-mode", json={"mode": "normal"})
+    assert res_normal.status_code == 200
+    assert res_normal.get_json()["active_mode"] == "normal"
+    assert res_normal.get_json()["mode_adjustment"] == -15.0
+
+    # Switch to Fruits and Snacks mode (-10%)
+    res_fruits = client.post("/api/food-mode", json={"mode": "fruits_and_snacks"})
+    assert res_fruits.status_code == 200
+    assert res_fruits.get_json()["active_mode"] == "fruits_and_snacks"
+    assert res_fruits.get_json()["mode_adjustment"] == -10.0
+
+    # Switch to Rice mode (+5%)
+    res_rice = client.post("/api/food-mode", json={"mode": "rice"})
+    assert res_rice.status_code == 200
+    assert res_rice.get_json()["active_mode"] == "rice"
+    assert res_rice.get_json()["mode_adjustment"] == 5.0
+
+    # Invalid mode rejection
+    res_invalid = client.post("/api/food-mode", json={"mode": "invalid_food"})
+    assert res_invalid.status_code == 400
+
+
+def test_mode_switching_recalculates_score_without_accumulation(client):
+    """
+    Critical Test:
+    Switching modes must immediately recalculate the displayed score using the latest available base score.
+    Do not accumulate adjustments when switching modes. Always calculate from the original base score.
+    """
+    # 1. Post a sensor reading to establish an unadjusted base score
+    client.post("/api/food-mode", json={"mode": "rice"})
+    res_post = client.post("/api/sensor-data", json={
+        "temperature": 18.0,
+        "humidity": 65.0,
+        "gas": 250.0,
+        "device_id": "TEST_UNIT",
+        "source": "simulator"
+    })
+    assert res_post.status_code == 201
+    post_data = res_post.get_json()
+    base_score = post_data["risk"]["base_risk_score"]
+
+    # In Rice mode (+5): display_score = clamp(base + 5, 0, 100)
+    assert post_data["risk"]["mode_adjustment"] == 5.0
+    expected_rice = max(0.0, min(100.0, round(base_score + 5.0, 2)))
+    assert post_data["risk"]["composite_score"] == expected_rice
+
+    # 2. Switch to Normal mode (-15): must compute from original base_score, NOT from rice score!
+    client.post("/api/food-mode", json={"mode": "normal"})
+    latest_normal = client.get("/api/latest").get_json()
+    assert latest_normal["risk"]["base_risk_score"] == base_score
+    assert latest_normal["risk"]["mode_adjustment"] == -15.0
+    expected_normal = max(0.0, min(100.0, round(base_score - 15.0, 2)))
+    assert latest_normal["risk"]["composite_score"] == expected_normal
+
+    # 3. Switch to Fruits & Snacks mode (-10): must compute from base_score, NOT from normal score!
+    client.post("/api/food-mode", json={"mode": "fruits_and_snacks"})
+    latest_fruits = client.get("/api/latest").get_json()
+    assert latest_fruits["risk"]["base_risk_score"] == base_score
+    assert latest_fruits["risk"]["mode_adjustment"] == -10.0
+    expected_fruits = max(0.0, min(100.0, round(base_score - 10.0, 2)))
+    assert latest_fruits["risk"]["composite_score"] == expected_fruits
 
 
 def test_session_lifecycle_api(client):
     # Start session
     res = client.post("/api/sessions/start", json={
-        "food_profile_id": "rice",
+        "food_profile_id": "normal",
         "session_name": "API Test Session"
     })
     assert res.status_code == 201
     s_data = res.get_json()
     assert s_data["status"] == "session_started"
-    assert s_data["session"]["food_profile_id"] == "rice"
+    assert s_data["session"]["food_profile_id"] == "normal"
 
     # Verify active session
     res_list = client.get("/api/sessions")
@@ -216,9 +293,9 @@ def test_session_isolation_no_exposure_leak(client):
         "timestamp": datetime.now(timezone.utc).isoformat()
     })
 
-    # End Session 1 and start Session 2 for Oranges
+    # End Session 1 and start Session 2 for Fruits and Snacks
     client.post("/api/sessions/end")
-    s2 = client.post("/api/sessions/start", json={"food_profile_id": "oranges", "session_name": "Batch 2"}).get_json()["session"]
+    s2 = client.post("/api/sessions/start", json={"food_profile_id": "fruits_and_snacks", "session_name": "Batch 2"}).get_json()["session"]
 
     latest = client.get("/api/latest").get_json()
     # Active session must have 0 accumulated hours

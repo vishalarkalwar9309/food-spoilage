@@ -12,7 +12,13 @@ from flask import Flask, request, jsonify
 from flask_cors import CORS
 
 import database
-from food_profiles import get_default_profiles, get_profile_by_id
+from food_profiles import (
+    DEFAULT_FOOD_PROFILES,
+    get_default_profiles,
+    get_profile_by_id,
+    compute_adjusted_score,
+    MODE_ADJUSTMENTS
+)
 from risk_engine import (
     calculate_temperature_risk,
     calculate_humidity_risk,
@@ -104,13 +110,13 @@ def get_hardware_status() -> dict:
 
 
 def get_current_profile_dict() -> dict:
-    """Helper to get current active session profile or fallback to rice."""
+    """Helper to get current active session profile or fallback to normal."""
     active_session = database.get_active_session(DB_PATH)
     if active_session and active_session.get("food_profile_id"):
         prof = database.get_food_profile(active_session["food_profile_id"], DB_PATH)
         if prof:
             return prof
-    return get_profile_by_id("rice") or list(get_default_profiles().values())[0]
+    return get_profile_by_id("normal") or list(get_default_profiles().values())[0]
 
 
 def process_sensor_reading(payload: dict) -> dict:
@@ -213,15 +219,19 @@ def process_sensor_reading(payload: dict) -> dict:
 
     ds = calculate_duration_risk(accumulated_hours, ideal_shelf_life)
 
-    # 5. Calculate composite risk
+    # 5. Calculate base composite risk
     weights = {
         "weight_temp": profile.get("weight_temp", 0.30),
         "weight_humidity": profile.get("weight_humidity", 0.25),
         "weight_gas": profile.get("weight_gas", 0.25),
         "weight_duration": profile.get("weight_duration", 0.20),
     }
-    composite_risk = calculate_composite_risk(ts, hs, gs, ds, weights)
-    category, color_code = classify_risk(composite_risk)
+    base_composite_risk = calculate_composite_risk(ts, hs, gs, ds, weights)
+
+    # 5b. Apply mode-based demonstration adjustment:
+    #     display_score = clamp(base_risk_score + mode_adjustment, 0, 100)
+    adjusted_score, mode_adj = compute_adjusted_score(base_composite_risk, profile_id)
+    category, color_code = classify_risk(adjusted_score)
     recommendation = generate_recommendations(category, profile, ts, hs, gs, ds, temp, humidity, gas)
 
     # 6. Alert management (based on previous evaluated risk category for this session)
@@ -232,11 +242,11 @@ def process_sensor_reading(payload: dict) -> dict:
 
     alert_created = None
     if current_order > prev_order and current_order > 0:
-        alert_msg = f"Storage risk elevated to {category.upper()} ({composite_risk:.1f}%). {recommendation}"
+        alert_msg = f"Storage risk elevated to {category.upper()} ({adjusted_score:.1f}%). {recommendation}"
         alert_id = database.insert_alert(
             severity=category,
             message=alert_msg,
-            risk_score=composite_risk,
+            risk_score=adjusted_score,
             previous_severity=prev_category,
             timestamp=timestamp_str,
             session_id=session_id,
@@ -246,11 +256,11 @@ def process_sensor_reading(payload: dict) -> dict:
             "id": alert_id,
             "severity": category,
             "message": alert_msg,
-            "risk_score": composite_risk,
+            "risk_score": adjusted_score,
             "timestamp": timestamp_str
         }
 
-    # 7. Persist sensor reading and risk score
+    # 7. Persist sensor reading and risk score (base_composite_risk preserved in DB)
     reading_id = database.insert_sensor_reading(
         device_id=device_id,
         source=source,
@@ -289,7 +299,7 @@ def process_sensor_reading(payload: dict) -> dict:
         humidity_score=hs,
         gas_score=gs,
         duration_score=ds,
-        composite_risk=composite_risk,
+        composite_risk=base_composite_risk,
         risk_category=category,
         recommendation=recommendation,
         timestamp=timestamp_str,
@@ -312,9 +322,15 @@ def process_sensor_reading(payload: dict) -> dict:
             "temp_max": profile["temp_max"],
             "humidity_min": profile["humidity_min"],
             "humidity_max": profile["humidity_max"],
+            "mode_adjustment": mode_adj
         },
         "risk": {
-            "composite_score": composite_risk,
+            "composite_score": adjusted_score,
+            "base_risk_score": base_composite_risk,
+            "mode_adjustment": mode_adj,
+            "adjusted_score": adjusted_score,
+            "is_demonstration_adjusted": True,
+            "adjustment_disclaimer": "Mode-based demonstration adjustment (+5% Rice, -10% Fruits & Snacks, -15% Normal). Does not alter raw physical sensor telemetry.",
             "category": category,
             "color": color_code,
             "components": {
@@ -415,8 +431,22 @@ def get_latest():
             }
         }), 200
 
-    # Format structured output
-    category, color_code = classify_risk(latest.get("composite_risk", 0.0))
+    # Format structured output with immediate mode-based score recalculation
+    base_score = float(latest.get("composite_risk") or 0.0)
+    adjusted_score, mode_adj = compute_adjusted_score(base_score, current_profile["id"])
+    category, color_code = classify_risk(adjusted_score)
+    recommendation = generate_recommendations(
+        category,
+        current_profile,
+        float(latest.get("temp_score") or 0.0),
+        float(latest.get("humidity_score") or 0.0),
+        float(latest.get("gas_score") or 0.0),
+        float(latest.get("duration_score") or 0.0),
+        float(latest.get("temperature") or 0.0),
+        float(latest.get("humidity") or 0.0),
+        float(latest.get("gas") or 0.0)
+    )
+
     return jsonify({
         "has_data": True,
         "system_mode": system_state["mode"],
@@ -431,8 +461,13 @@ def get_latest():
             "timestamp": latest["timestamp"]
         },
         "risk": {
-            "composite_score": latest["composite_risk"],
-            "category": latest["risk_category"] or category,
+            "composite_score": adjusted_score,
+            "base_risk_score": base_score,
+            "mode_adjustment": mode_adj,
+            "adjusted_score": adjusted_score,
+            "is_demonstration_adjusted": True,
+            "adjustment_disclaimer": "Mode-based demonstration adjustment (+5% Rice, -10% Fruits & Snacks, -15% Normal). Does not alter raw physical sensor telemetry.",
+            "category": category,
             "color": color_code,
             "components": {
                 "temp_score": latest["temp_score"],
@@ -440,7 +475,7 @@ def get_latest():
                 "gas_score": latest["gas_score"],
                 "duration_score": latest["duration_score"]
             },
-            "recommendation": latest["recommendation"],
+            "recommendation": recommendation,
             "effective_exposure_hours": effective_hours,
             "ideal_shelf_life_hours": ideal_shelf_life
         },
@@ -520,6 +555,38 @@ def food_profiles_list():
         "count": len(profiles),
         "profiles": profiles
     }), 200
+
+
+@app.route("/api/food-mode", methods=["GET", "POST"])
+def food_mode_endpoint():
+    """
+    Get or set current active food mode ('normal', 'fruits_and_snacks', 'rice').
+    POST Payload: { "mode": "normal" | "fruits_and_snacks" | "rice", "session_name"?: string }
+    """
+    if request.method == "POST":
+        payload = request.get_json(silent=True) or {}
+        mode_id = payload.get("mode") or payload.get("food_profile_id")
+        if not mode_id or mode_id not in DEFAULT_FOOD_PROFILES:
+            return jsonify({"error": f"Invalid mode '{mode_id}'. Choose from: {list(DEFAULT_FOOD_PROFILES.keys())}"}), 400
+
+        prof = DEFAULT_FOOD_PROFILES[mode_id]
+        session_name = payload.get("session_name") or f"{prof['name']} Monitoring Session"
+        session = database.start_session(food_profile_id=mode_id, session_name=session_name, db_path=DB_PATH)
+        return jsonify({
+            "status": "mode_updated",
+            "active_mode": mode_id,
+            "mode_name": prof["name"],
+            "mode_adjustment": MODE_ADJUSTMENTS.get(mode_id, 0.0),
+            "session": session
+        }), 200
+    else:
+        current = get_current_profile_dict()
+        return jsonify({
+            "active_mode": current["id"],
+            "mode_name": current["name"],
+            "mode_adjustment": MODE_ADJUSTMENTS.get(current["id"], 0.0),
+            "available_modes": list(DEFAULT_FOOD_PROFILES.keys())
+        }), 200
 
 
 @app.route("/api/sessions", methods=["GET"])

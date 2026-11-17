@@ -12,7 +12,8 @@ import {
   stopSimulator,
   stepSimulator,
   acknowledgeAlert,
-  setSystemMode
+  setSystemMode,
+  setFoodMode
 } from './services/api';
 import {
   LatestDataResponse,
@@ -48,28 +49,29 @@ export const App: React.FC = () => {
   const [apiError, setApiError] = useState<string | null>(null);
   const [isStartingSession, setIsStartingSession] = useState<boolean>(false);
 
-  // Default fallback profile while loading (Rice default for current experiment)
+  // Default fallback profile while loading (Normal default)
   const fallbackProfile: FoodProfile = {
-    id: 'rice',
-    name: 'Rice',
-    scientific_name: 'Oryza sativa (Cooked / Prepared Grain)',
-    category: 'Prepared Grain (TCS Perishable)',
-    temp_min: 1.0,
-    temp_max: 4.0,
-    temp_crit: 25.0,
-    temp_freeze: -0.5,
-    humidity_min: 85.0,
-    humidity_max: 95.0,
-    ideal_shelf_life_hours: 96.0,
-    gas_baseline: 180.0,
-    gas_threshold: 380.0,
-    weight_temp: 0.30,
+    id: 'normal',
+    name: 'Normal',
+    scientific_name: 'Pantry / Ambient Grocery Goods',
+    category: 'Shelf-Stable Goods',
+    temp_min: 15.0,
+    temp_max: 24.0,
+    temp_crit: 35.0,
+    temp_freeze: 0.0,
+    humidity_min: 30.0,
+    humidity_max: 60.0,
+    ideal_shelf_life_hours: 720.0,
+    gas_baseline: 150.0,
+    gas_threshold: 400.0,
+    weight_temp: 0.25,
     weight_humidity: 0.25,
     weight_gas: 0.25,
-    weight_duration: 0.20,
-    stress_multiplier_alpha: 1.8,
-    description: 'Cooked rice is a high-moisture Time/Temperature Control for Safety (TCS) food requiring continuous refrigeration at 1–4°C (USDA/FDA Food Code). Spoilage risk escalates sharply above 4°C due to rapid Bacillus cereus spore germination. (Note: Raw dry grain requires <15°C and <65% RH for 12–24 month storage).',
-    icon: 'Wheat'
+    weight_duration: 0.25,
+    stress_multiplier_alpha: 1.0,
+    mode_adjustment: -15.0,
+    description: 'Standard ambient pantry storage for shelf-stable goods and general groceries under normal temperature and humidity conditions. Uses a demonstration adjustment of -15% on the base risk score.',
+    icon: 'Package'
   };
 
   const activeProfile: FoodProfile = latestData?.active_profile || fallbackProfile;
@@ -141,22 +143,15 @@ export const App: React.FC = () => {
   };
 
   const handleSelectProfile = async (profileId: string) => {
-    const prof = profiles.find((p) => p.id === profileId);
-    if (latestData?.active_session && latestData.active_session.is_active) {
-      const activeName = latestData.active_session.food_name || latestData.active_session.food_profile_id;
-      const confirmSwitch = window.confirm(
-        `A storage session for "${activeName}" is currently active. End it and start a new session for "${prof?.name || profileId}"?`
-      );
-      if (!confirmSwitch) return;
-    }
-
     setIsStartingSession(true);
     try {
-      const name = `${prof?.name || 'Produce'} Storage Session`;
-      await startStorageSession(profileId, name);
+      const res = await setFoodMode(profileId);
+      if (res && res.latest) {
+        setLatestData(res.latest);
+      }
       await loadAllData();
     } catch (err: any) {
-      alert(`Failed to set profile: ${err.message}`);
+      alert(`Failed to set food mode: ${err.message}`);
     } finally {
       setIsStartingSession(false);
     }

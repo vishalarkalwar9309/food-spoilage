@@ -2,7 +2,7 @@
 test_risk_engine.py
 Automated unit tests for Spoilage Risk Engine.
 Verifies all mathematical boundary conditions, equations, and classifications.
-Tested with physical experiment commodities: Rice and Oranges.
+Tested with the three selectable food storage modes: Normal, Fruits and Snacks, and Rice.
 """
 
 import pytest
@@ -22,7 +22,7 @@ from risk_engine import (
     classify_risk,
     generate_recommendations
 )
-from food_profiles import DEFAULT_FOOD_PROFILES
+from food_profiles import DEFAULT_FOOD_PROFILES, compute_adjusted_score, MODE_ADJUSTMENTS
 
 
 @pytest.fixture
@@ -31,8 +31,13 @@ def rice_profile():
 
 
 @pytest.fixture
-def orange_profile():
-    return DEFAULT_FOOD_PROFILES["oranges"]
+def fruits_and_snacks_profile():
+    return DEFAULT_FOOD_PROFILES["fruits_and_snacks"]
+
+
+@pytest.fixture
+def normal_profile():
+    return DEFAULT_FOOD_PROFILES["normal"]
 
 
 def test_temperature_risk_in_range(rice_profile):
@@ -152,22 +157,65 @@ def test_composite_risk_weights_and_bounds():
 
 
 def test_risk_classification():
-    """Ensure discrete tier categorization matches exact specification."""
-    # Low: 0 to 30
+    """Ensure discrete tier categorization matches updated actuator LED thresholds."""
+    # Low: 0 to 30 -> Green LED
     assert classify_risk(0.0)[0] == "Low"
     assert classify_risk(30.0)[0] == "Low"
 
-    # Moderate: > 30 to 60
+    # Moderate: > 30 to 50 -> Blue LED
     assert classify_risk(30.1)[0] == "Moderate"
-    assert classify_risk(60.0)[0] == "Moderate"
+    assert classify_risk(50.0)[0] == "Moderate"
 
-    # High: > 60 to 80
-    assert classify_risk(60.1)[0] == "High"
+    # High: > 50 to 80 -> Red LED
+    assert classify_risk(50.1)[0] == "High"
     assert classify_risk(80.0)[0] == "High"
 
-    # Critical: > 80 to 100
+    # Critical: > 80 to 100 -> Red LED
     assert classify_risk(80.1)[0] == "Critical"
     assert classify_risk(100.0)[0] == "Critical"
+
+
+def test_mode_adjustments_values_and_clamping():
+    """
+    Verify mode demonstration adjustments:
+        Normal: -15
+        Fruits and Snacks: -10
+        Rice: +5
+        display_score = clamp(base_risk_score + mode_adjustment, 0, 100)
+    """
+    base = 45.0
+
+    # Normal mode (-15)
+    score_normal, adj_normal = compute_adjusted_score(base, "normal")
+    assert adj_normal == -15.0
+    assert score_normal == 30.0
+    assert classify_risk(score_normal)[0] == "Low"  # Green LED threshold
+
+    # Fruits and Snacks mode (-10)
+    score_fruits, adj_fruits = compute_adjusted_score(base, "fruits_and_snacks")
+    assert adj_fruits == -10.0
+    assert score_fruits == 35.0
+    assert classify_risk(score_fruits)[0] == "Moderate"  # Blue LED threshold
+
+    # Rice mode (+5)
+    score_rice, adj_rice = compute_adjusted_score(base, "rice")
+    assert adj_rice == 5.0
+    assert score_rice == 50.0
+    assert classify_risk(score_rice)[0] == "Moderate"  # Blue LED upper boundary
+
+    # Cross 50 threshold for Rice
+    base_high = 48.0
+    score_rice_high, _ = compute_adjusted_score(base_high, "rice")
+    assert score_rice_high == 53.0
+    assert classify_risk(score_rice_high)[0] == "High"  # Red LED threshold (>50)
+
+    # Lower boundary clamping (cannot drop below 0.0)
+    score_low_clamped, _ = compute_adjusted_score(10.0, "normal")
+    assert score_low_clamped == 0.0
+
+    # Upper boundary clamping (cannot exceed 100.0)
+    score_high_clamped, _ = compute_adjusted_score(98.0, "rice")
+    assert score_high_clamped == 100.0
 
 
 def test_actionable_recommendations(rice_profile):

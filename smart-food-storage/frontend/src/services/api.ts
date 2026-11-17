@@ -42,6 +42,21 @@ export async function fetchFoodProfiles(): Promise<{ count: number; profiles: Fo
   return res.json();
 }
 
+export async function setFoodMode(mode: string): Promise<{
+  status: string;
+  mode: string;
+  profile: FoodProfile;
+  latest: LatestDataResponse | null;
+}> {
+  const res = await fetch(`${BASE_URL}/food-mode`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mode })
+  });
+  if (!res.ok) throw new Error(`Failed to set food mode: ${res.statusText}`);
+  return res.json();
+}
+
 export async function fetchSessions(): Promise<{ active_session: StorageSession | null; sessions: StorageSession[] }> {
   const res = await fetch(`${BASE_URL}/sessions`);
   if (!res.ok) throw new Error(`Failed to fetch sessions: ${res.statusText}`);

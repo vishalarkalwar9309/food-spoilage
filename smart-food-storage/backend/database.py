@@ -127,7 +127,13 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
     cur.execute("CREATE INDEX IF NOT EXISTS idx_sessions_active ON storage_sessions(is_active);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_alerts_timestamp ON alerts(timestamp);")
 
-    # Seed / synchronize predefined food profiles
+    # Check and add mode_adjustment column if missing in existing installations
+    cur.execute("PRAGMA table_info(food_profiles);")
+    cols = [r["name"] for r in cur.fetchall()]
+    if "mode_adjustment" not in cols:
+        cur.execute("ALTER TABLE food_profiles ADD COLUMN mode_adjustment REAL NOT NULL DEFAULT 0.0;")
+
+    # Seed / synchronize predefined food profiles first
     now_iso = datetime.now(timezone.utc).isoformat()
     for p in DEFAULT_FOOD_PROFILES.values():
         cur.execute("""
@@ -135,8 +141,8 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
             id, name, scientific_name, category, temp_min, temp_max, temp_crit, temp_freeze,
             humidity_min, humidity_max, ideal_shelf_life_hours, gas_baseline, gas_threshold,
             weight_temp, weight_humidity, weight_gas, weight_duration, stress_multiplier_alpha,
-            description, icon, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            description, icon, mode_adjustment, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
             name = excluded.name,
             scientific_name = excluded.scientific_name,
@@ -156,20 +162,25 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
             weight_duration = excluded.weight_duration,
             stress_multiplier_alpha = excluded.stress_multiplier_alpha,
             description = excluded.description,
-            icon = excluded.icon;
+            icon = excluded.icon,
+            mode_adjustment = excluded.mode_adjustment;
         """, (
             p["id"], p["name"], p.get("scientific_name", ""), p.get("category", ""),
             p["temp_min"], p["temp_max"], p["temp_crit"], p["temp_freeze"],
             p["humidity_min"], p["humidity_max"], p["ideal_shelf_life_hours"],
             p["gas_baseline"], p["gas_threshold"], p["weight_temp"], p["weight_humidity"],
             p["weight_gas"], p["weight_duration"], p["stress_multiplier_alpha"],
-            p.get("description", ""), p.get("icon", ""), now_iso
+            p.get("description", ""), p.get("icon", ""), float(p.get("mode_adjustment", 0.0)), now_iso
         ))
 
+    # Now that new profiles exist, safely remap legacy "oranges" references to "fruits_and_snacks"
+    cur.execute("UPDATE storage_sessions SET food_profile_id = 'fruits_and_snacks' WHERE food_profile_id = 'oranges';")
+    cur.execute("UPDATE risk_history SET food_profile_id = 'fruits_and_snacks' WHERE food_profile_id = 'oranges';")
+
     valid_ids = tuple(DEFAULT_FOOD_PROFILES.keys())
-    # Remap obsolete session & risk references to preserve FK integrity before removing old profiles
-    cur.execute(f"UPDATE storage_sessions SET food_profile_id = 'rice' WHERE food_profile_id NOT IN ({','.join(['?']*len(valid_ids))});", valid_ids)
-    cur.execute(f"UPDATE risk_history SET food_profile_id = 'rice' WHERE food_profile_id NOT IN ({','.join(['?']*len(valid_ids))});", valid_ids)
+    # Remap any other obsolete session & risk references to preserve FK integrity before removing old profiles
+    cur.execute(f"UPDATE storage_sessions SET food_profile_id = 'normal' WHERE food_profile_id NOT IN ({','.join(['?']*len(valid_ids))});", valid_ids)
+    cur.execute(f"UPDATE risk_history SET food_profile_id = 'normal' WHERE food_profile_id NOT IN ({','.join(['?']*len(valid_ids))});", valid_ids)
 
     # Remove any obsolete profiles not in DEFAULT_FOOD_PROFILES
     cur.execute(f"DELETE FROM food_profiles WHERE id NOT IN ({','.join(['?']*len(valid_ids))});", valid_ids)
@@ -193,7 +204,14 @@ def get_all_food_profiles(db_path: str = DEFAULT_DB_PATH) -> List[Dict[str, Any]
     """Retrieve all food profiles."""
     conn = get_db_connection(db_path)
     cur = conn.cursor()
-    cur.execute("SELECT * FROM food_profiles ORDER BY name ASC;")
+    cur.execute("""
+        SELECT * FROM food_profiles 
+        ORDER BY CASE id 
+            WHEN 'normal' THEN 1 
+            WHEN 'fruits_and_snacks' THEN 2 
+            WHEN 'rice' THEN 3 
+            ELSE 4 END ASC;
+    """)
     rows = [dict(r) for r in cur.fetchall()]
     conn.close()
     return rows

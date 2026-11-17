@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertCircle, ShieldAlert, CheckCircle2, AlertTriangle, Info } from 'lucide-react';
+import { AlertCircle, ShieldAlert, CheckCircle2, AlertTriangle, Info, SlidersHorizontal } from 'lucide-react';
 import { RiskAssessment, FoodProfile } from '../types';
 
 interface RiskGaugeCardProps {
@@ -9,10 +9,12 @@ interface RiskGaugeCardProps {
 
 export const RiskGaugeCard: React.FC<RiskGaugeCardProps> = ({ risk, profile }) => {
   const score = risk ? Math.min(100, Math.max(0, risk.composite_score)) : 0;
+  const baseScore = risk?.base_risk_score !== undefined ? risk.base_risk_score : score;
+  const modeAdjustment = risk?.mode_adjustment !== undefined ? risk.mode_adjustment : (profile.mode_adjustment ?? 0);
   const category = risk?.category || 'Low';
   const recommendation = risk?.recommendation || 'No data recorded yet. Initialize session or start simulation.';
 
-  // Color mapping based on category
+  // Color mapping based on updated actuator thresholds (0-30 Green, >30-50 Blue, >50 Red)
   const colorMap = {
     Low: {
       bg: 'bg-emerald-500/10',
@@ -24,22 +26,22 @@ export const RiskGaugeCard: React.FC<RiskGaugeCardProps> = ({ risk, profile }) =
       label: 'Low Risk (0–30%)'
     },
     Moderate: {
-      bg: 'bg-amber-500/10',
-      border: 'border-amber-500/30',
-      text: 'text-amber-400',
-      fill: '#F59E0B',
-      badgeBg: 'bg-amber-950/80 text-amber-400 border-amber-800',
+      bg: 'bg-blue-500/10',
+      border: 'border-blue-500/30',
+      text: 'text-blue-400',
+      fill: '#3B82F6',
+      badgeBg: 'bg-blue-950/80 text-blue-400 border-blue-800',
       icon: Info,
-      label: 'Moderate Risk (31–60%)'
+      label: 'Moderate Risk (>30–50%)'
     },
     High: {
-      bg: 'bg-orange-500/10',
-      border: 'border-orange-500/30',
-      text: 'text-orange-400',
-      fill: '#F97316',
-      badgeBg: 'bg-orange-950/80 text-orange-400 border-orange-800',
+      bg: 'bg-red-500/10',
+      border: 'border-red-500/30',
+      text: 'text-red-400',
+      fill: '#EF4444',
+      badgeBg: 'bg-red-950/80 text-red-400 border-red-800',
       icon: AlertTriangle,
-      label: 'High Risk (61–80%)'
+      label: 'High Risk (>50–80%)'
     },
     Critical: {
       bg: 'bg-red-500/10',
@@ -48,7 +50,7 @@ export const RiskGaugeCard: React.FC<RiskGaugeCardProps> = ({ risk, profile }) =
       fill: '#EF4444',
       badgeBg: 'bg-red-950/80 text-red-400 border-red-800',
       icon: ShieldAlert,
-      label: 'Critical Risk (81–100%)'
+      label: 'Critical Risk (>80–100%)'
     }
   };
 
@@ -75,16 +77,25 @@ export const RiskGaugeCard: React.FC<RiskGaugeCardProps> = ({ risk, profile }) =
             Composite Spoilage Risk Engine
           </span>
           <h2 className="text-lg lg:text-xl font-bold text-white flex items-center gap-2">
-            Target Commodity: <span className="text-cyan-400">{profile.name}</span>
+            Selected Mode: <span className="text-cyan-400 font-mono">{profile.name}</span>
             {profile.scientific_name && (
               <span className="text-xs font-normal italic text-slate-400">({profile.scientific_name})</span>
             )}
           </h2>
         </div>
 
-        <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-semibold border ${theme.badgeBg}`}>
-          <IconComponent className="w-3.5 h-3.5" />
-          <span>{category.toUpperCase()} RISK STATE</span>
+        <div className="flex items-center gap-2.5">
+          {/* Mode Adjustment Pill */}
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-medium bg-dark-900/80 text-cyan-300 border border-cyan-800/80">
+            <SlidersHorizontal className="w-3 h-3 text-cyan-400" />
+            <span>Adj: {modeAdjustment >= 0 ? `+${modeAdjustment}%` : `${modeAdjustment}%`}</span>
+          </div>
+
+          {/* Risk State Badge */}
+          <div className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-mono font-semibold border ${theme.badgeBg}`}>
+            <IconComponent className="w-3.5 h-3.5" />
+            <span>{category.toUpperCase()} RISK STATE</span>
+          </div>
         </div>
       </div>
 
@@ -122,21 +133,38 @@ export const RiskGaugeCard: React.FC<RiskGaugeCardProps> = ({ risk, profile }) =
               <span className={`text-4xl font-black font-mono tracking-tight ${theme.text}`}>
                 {score.toFixed(1)}%
               </span>
-              <span className="text-xs uppercase tracking-widest text-slate-400 font-mono mt-0.5">
-                Risk Score
+              <span className="text-[11px] uppercase tracking-widest text-slate-400 font-mono mt-0.5">
+                Adjusted Score
               </span>
             </div>
           </div>
 
-          <span className="text-xs text-slate-400 mt-2 font-mono text-center">
-            Scale: 0% (Optimal) to 100% (Critical)
+          {/* Mode Score Decomposition Box */}
+          <div className="mt-3 w-full bg-dark-900/90 border border-dark-750 p-2.5 rounded-lg text-[11px] font-mono space-y-1 text-slate-300">
+            <div className="flex justify-between">
+              <span className="text-slate-400">Base Model Score:</span>
+              <span className="text-slate-200 font-semibold">{baseScore.toFixed(1)}%</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">Mode Adjustment:</span>
+              <span className={modeAdjustment < 0 ? 'text-emerald-400 font-semibold' : 'text-amber-400 font-semibold'}>
+                {modeAdjustment >= 0 ? `+${modeAdjustment.toFixed(1)}%` : `${modeAdjustment.toFixed(1)}%`}
+              </span>
+            </div>
+            <div className="flex justify-between border-t border-dark-800 pt-1 text-cyan-300 font-bold">
+              <span>Final Display Score:</span>
+              <span>{score.toFixed(1)}%</span>
+            </div>
+          </div>
+          <span className="text-[10px] text-slate-400 mt-1.5 font-mono text-center">
+            clamp(base + adjustment, 0, 100)
           </span>
         </div>
 
         {/* Component Risk Breakdown Bars */}
         <div className="md:col-span-8 flex flex-col justify-center space-y-3.5">
           <div className="flex items-center justify-between text-xs font-mono text-slate-300">
-            <span>Mathematical Model Parameters:</span>
+            <span>Base Model Physical Parameters:</span>
             <span className="text-slate-400">R = (Ts·0.30) + (Hs·0.25) + (Gs·0.25) + (Ds·0.20)</span>
           </div>
 

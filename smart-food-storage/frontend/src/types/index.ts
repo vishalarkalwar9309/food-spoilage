@@ -19,6 +19,7 @@ export interface FoodProfile {
   stress_multiplier_alpha: number;
   description?: string;
   icon?: string;
+  mode_adjustment?: number;
 }
 
 export interface StorageSession {
@@ -53,6 +54,11 @@ export interface RiskComponents {
 
 export interface RiskAssessment {
   composite_score: number;
+  base_risk_score?: number;
+  mode_adjustment?: number;
+  adjusted_score?: number;
+  is_demonstration_adjusted?: boolean;
+  adjustment_disclaimer?: string;
   category: 'Low' | 'Moderate' | 'High' | 'Critical';
   color: 'green' | 'yellow' | 'orange' | 'red';
   components: RiskComponents;

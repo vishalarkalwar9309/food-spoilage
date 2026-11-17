@@ -139,15 +139,15 @@ def calculate_composite_risk(
 def classify_risk(risk_score: float) -> Tuple[str, str]:
     """
     Classify composite risk score into severity tier and corresponding color code.
-    Tiers:
+    Tiers (aligned with updated LED actuator thresholds: 0-30 Green, >30-50 Blue, >50 Red):
         0 - 30: Low (Green)
-        > 30 - 60: Moderate (Yellow)
-        > 60 - 80: High (Orange)
-        > 80 - 100: Critical (Red)
+        > 30 - 50: Moderate (Yellow / Blue LED)
+        > 50 - 80: High (Orange / Red LED)
+        > 80 - 100: Critical (Red / Red LED)
     """
     if risk_score <= 30.0:
         return "Low", "green"
-    elif risk_score <= 60.0:
+    elif risk_score <= 50.0:
         return "Moderate", "yellow"
     elif risk_score <= 80.0:
         return "High", "orange"

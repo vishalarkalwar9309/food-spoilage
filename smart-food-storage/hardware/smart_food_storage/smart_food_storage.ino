@@ -9,9 +9,9 @@
  *   - MQ-135 (Gas Sensor)     : AO -> 10k:10k Voltage Divider -> GPIO 34 (ADC1_CH6)
  *                               VCC -> 5V / VIN, GND -> GND, DO -> Not Connected
  *   - 0.96" I2C OLED (SSD1306): SDA -> GPIO 21, SCL -> GPIO 22, VCC -> 3.3V, GND -> GND
- *   - Status LEDs (220R each) : Red   -> GPIO 18 (High & Critical Spoilage Risk)
- *                               Green -> GPIO 19 (Low / Safe Spoilage Risk)
- *                               Blue  -> GPIO 23 (Moderate Spoilage Risk / Warmup Pulse)
+ *   - Status LEDs (220R each) : Red   -> GPIO 18 (Score > 50%: Elevated / Critical Risk)
+ *                               Green -> GPIO 19 (Score 0–30%: Low / Safe Risk)
+ *                               Blue  -> GPIO 23 (Score > 30% and <= 50%: Moderate Risk)
  * 
  * Electrical Safety & Signal Conditioning:
  *   ESP32 ADC pins are rated for 3.3V maximum and are NOT 5V tolerant.
@@ -75,14 +75,14 @@
 DHT dht(DHT_PIN, DHT_TYPE);
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET_PIN);
 
-// Risk Classification State (Derived directly from Flask backend risk_engine)
+// Risk Classification State (Derived directly from Flask backend adjusted score)
 enum RiskLevel {
   RISK_UNKNOWN = 0,
-  RISK_LOW,        // 0  - 30%: Safe / Green LED
-  RISK_MODERATE,   // 31 - 60%: Warning / Blue LED
-  RISK_HIGH,       // 61 - 80%: Elevated / Red LED
-  RISK_CRITICAL,   // 81 - 100%: Critical / Red LED
-  RISK_OFFLINE     // Link or Sensor Fault / Error Pattern
+  RISK_LOW,        // 0 - 30%: Safe / Green LED
+  RISK_MODERATE,   // >30 - <=50%: Warning / Blue LED
+  RISK_HIGH,       // >50%: Elevated / Red LED
+  RISK_CRITICAL,   // >80%: Critical / Red LED
+  RISK_OFFLINE     // Link or Sensor Fault / Error Pattern (Alt Red/Blue Blink)
 };
 
 RiskLevel     currentRiskLevel      = RISK_UNKNOWN;
@@ -405,19 +405,21 @@ void parseBackendResponse(const String &responseJson) {
         }
       }
 
-      Serial.printf("[BACKEND TRUTH] Crop: %s | Risk Category: %s | Score: %.1f%%\n",
+      Serial.printf("[BACKEND TRUTH] Crop: %s | Risk Category: %s | Adjusted Score: %.1f%%\n",
                     activeProfileName.c_str(), currentRiskCategory.c_str(), currentCompositeScore);
 
-      if (currentRiskCategory.equalsIgnoreCase("Low")) {
+      // Direct LED drive based on final adjusted score from backend:
+      // 0–30: Green LED ON (RISK_LOW)
+      // >30 and <=50: Blue LED ON (RISK_MODERATE)
+      // >50: Red LED ON (RISK_HIGH / RISK_CRITICAL)
+      if (currentCompositeScore <= 30.0f) {
         currentRiskLevel = RISK_LOW;
-      } else if (currentRiskCategory.equalsIgnoreCase("Moderate")) {
+      } else if (currentCompositeScore <= 50.0f) {
         currentRiskLevel = RISK_MODERATE;
-      } else if (currentRiskCategory.equalsIgnoreCase("High")) {
-        currentRiskLevel = RISK_HIGH;
-      } else if (currentRiskCategory.equalsIgnoreCase("Critical")) {
+      } else if (currentCompositeScore > 80.0f) {
         currentRiskLevel = RISK_CRITICAL;
       } else {
-        currentRiskLevel = RISK_UNKNOWN;
+        currentRiskLevel = RISK_HIGH;
       }
 
       updateActuators(currentRiskLevel);

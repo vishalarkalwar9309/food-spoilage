@@ -303,8 +303,8 @@ The Smart Food Storage Spoilage Predictor backend provides a stateless RESTful i
 * **Request Body:**
 ```json
 {
-  "food_profile_id": "oranges",
-  "session_name": "Fresh Navel Oranges Cold Room Batch 1"
+  "food_profile_id": "fruits_and_snacks",
+  "session_name": "Fresh Produce & Snack Storage Batch 1"
 }
 ```
 * **Success Response (`201 Created`):**
@@ -313,8 +313,8 @@ The Smart Food Storage Spoilage Predictor backend provides a stateless RESTful i
   "status": "started",
   "session": {
     "id": 4,
-    "session_name": "Fresh Navel Oranges Cold Room Batch 1",
-    "food_profile_id": "oranges",
+    "session_name": "Fresh Produce & Snack Storage Batch 1",
+    "food_profile_id": "fruits_and_snacks",
     "start_time": "2026-11-15T10:30:00+00:00",
     "is_active": 1,
     "accumulated_effective_hours": 0.0,
@@ -340,7 +340,88 @@ The Smart Food Storage Spoilage Predictor backend provides a stateless RESTful i
 
 ---
 
-### 3.4 Alerts Management
+### 3.4 Food Modes & Commodity Profiles
+
+#### `GET /api/food-profiles`
+**Description:** Retrieves all three supported commodity storage modes (`normal`, `fruits_and_snacks`, `rice`), including their calibrated psychrometric envelopes, gas thresholds, and demonstration risk adjustments.
+
+* **Success Response (`200 OK`):**
+```json
+{
+  "count": 3,
+  "profiles": [
+    {
+      "id": "normal",
+      "name": "Normal",
+      "category": "Shelf-Stable Goods",
+      "temp_min": 15.0,
+      "temp_max": 22.0,
+      "humidity_min": 40.0,
+      "humidity_max": 65.0,
+      "ideal_shelf_life_hours": 336.0,
+      "gas_baseline": 180.0,
+      "gas_threshold": 400.0,
+      "mode_adjustment": -15.0
+    },
+    {
+      "id": "fruits_and_snacks",
+      "name": "Fruits and Snacks",
+      "category": "Fresh Produce / Perishable",
+      "temp_min": 3.0,
+      "temp_max": 8.0,
+      "humidity_min": 85.0,
+      "humidity_max": 90.0,
+      "ideal_shelf_life_hours": 672.0,
+      "gas_baseline": 180.0,
+      "gas_threshold": 400.0,
+      "mode_adjustment": -10.0
+    },
+    {
+      "id": "rice",
+      "name": "Rice",
+      "category": "Prepared Grain (TCS Perishable)",
+      "temp_min": 1.0,
+      "temp_max": 4.0,
+      "humidity_min": 85.0,
+      "humidity_max": 95.0,
+      "ideal_shelf_life_hours": 96.0,
+      "gas_baseline": 180.0,
+      "gas_threshold": 380.0,
+      "mode_adjustment": 5.0
+    }
+  ]
+}
+```
+
+#### `GET /api/food-mode` & `POST /api/food-mode`
+**Description:** Gets the current active food mode or immediately switches modes. When switching modes, the backend immediately recalculates the displayed score from the latest available base score without accumulating adjustments.
+
+* **Formula:** `display_score = clamp(base_risk_score + mode_adjustment, 0, 100)`
+* **POST Request Body:**
+```json
+{
+  "mode": "fruits_and_snacks"
+}
+```
+* **Success Response (`200 OK`):**
+```json
+{
+  "status": "mode_updated",
+  "active_mode": "fruits_and_snacks",
+  "mode_name": "Fruits and Snacks",
+  "mode_adjustment": -10.0,
+  "session": {
+    "id": 5,
+    "session_name": "Fruits and Snacks Monitoring Session",
+    "food_profile_id": "fruits_and_snacks",
+    "is_active": 1
+  }
+}
+```
+
+---
+
+### 3.5 Alerts Management
 
 #### `GET /api/alerts`
 **Description:** Retrieves historical and unacknowledged alerts sorted chronologically descending.
@@ -432,16 +513,31 @@ void postTelemetry(float temp, float hum, float gas) {
   payload += "}";
 
   int httpCode = http.POST(payload);
-  if (httpCode == 201) {
+  if (httpCode == 201 || httpCode == 200) {
     String response = http.getString();
-    // Parse "category":"Low" / "Moderate" / "High" / "Critical"
-    int catIdx = response.indexOf("\"category\":");
-    if (catIdx != -1) {
-      int s1 = response.indexOf("\"", catIdx + 11);
-      int s2 = response.indexOf("\"", s1 + 1);
-      String category = response.substring(s1 + 1, s2);
-      Serial.printf("Risk Category: %s\n", category.c_str());
+
+    // 1. Extract backend-adjusted composite score (Single Source of Truth)
+    float adjustedScore = 0.0f;
+    int scoreIdx = response.indexOf("\"composite_score\":");
+    if (scoreIdx != -1) {
+      int sStart = scoreIdx + 18;
+      int sEnd = response.indexOf(",", sStart);
+      if (sEnd == -1) sEnd = response.indexOf("}", sStart);
+      if (sEnd != -1) adjustedScore = response.substring(sStart, sEnd).toFloat();
     }
+
+    // 2. Drive physical status LEDs directly based on backend adjusted score:
+    //    0–30: Green LED ON (Safe)
+    //    >30 and <=50: Blue LED ON (Moderate Warning)
+    //    >50: Red LED ON (Elevated / Critical Danger)
+    if (adjustedScore <= 30.0f) {
+      digitalWrite(LED_GREEN, HIGH); digitalWrite(LED_BLUE, LOW);  digitalWrite(LED_RED, LOW);
+    } else if (adjustedScore <= 50.0f) {
+      digitalWrite(LED_GREEN, LOW);  digitalWrite(LED_BLUE, HIGH); digitalWrite(LED_RED, LOW);
+    } else {
+      digitalWrite(LED_GREEN, LOW);  digitalWrite(LED_BLUE, LOW);  digitalWrite(LED_RED, HIGH);
+    }
+    Serial.printf("[SYNC] Final Adjusted Score: %.1f%%\n", adjustedScore);
   }
   http.end();
 }
