@@ -48,25 +48,28 @@ export const App: React.FC = () => {
   const [apiError, setApiError] = useState<string | null>(null);
   const [isStartingSession, setIsStartingSession] = useState<boolean>(false);
 
-  // Default fallback profile while loading
+  // Default fallback profile while loading (Rice default for current experiment)
   const fallbackProfile: FoodProfile = {
-    id: 'tomatoes',
-    name: 'Tomatoes',
-    scientific_name: 'Solanum lycopersicum',
-    temp_min: 12.0,
-    temp_max: 15.0,
-    temp_crit: 30.0,
-    temp_freeze: 0.0,
+    id: 'rice',
+    name: 'Rice',
+    scientific_name: 'Oryza sativa (Cooked / Prepared Grain)',
+    category: 'Prepared Grain (TCS Perishable)',
+    temp_min: 1.0,
+    temp_max: 4.0,
+    temp_crit: 25.0,
+    temp_freeze: -0.5,
     humidity_min: 85.0,
-    humidity_max: 90.0,
-    ideal_shelf_life_hours: 168.0,
+    humidity_max: 95.0,
+    ideal_shelf_life_hours: 96.0,
     gas_baseline: 180.0,
-    gas_threshold: 400.0,
+    gas_threshold: 380.0,
     weight_temp: 0.30,
     weight_humidity: 0.25,
     weight_gas: 0.25,
     weight_duration: 0.20,
-    stress_multiplier_alpha: 1.5
+    stress_multiplier_alpha: 1.8,
+    description: 'Cooked rice is a high-moisture Time/Temperature Control for Safety (TCS) food requiring continuous refrigeration at 1–4°C (USDA/FDA Food Code). Spoilage risk escalates sharply above 4°C due to rapid Bacillus cereus spore germination. (Note: Raw dry grain requires <15°C and <65% RH for 12–24 month storage).',
+    icon: 'Wheat'
   };
 
   const activeProfile: FoodProfile = latestData?.active_profile || fallbackProfile;

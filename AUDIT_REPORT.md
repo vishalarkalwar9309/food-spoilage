@@ -185,8 +185,8 @@ Direct HTTP request verification against live Flask server (`http://127.0.0.1:50
 
 ```
 1. Health Endpoint: HTTP 200 (status: "online", database: "connected")
-2. Food Profiles: HTTP 200 (4 profiles returned: tomatoes, bananas, apples, leafy_vegetables)
-3. Session Creation (Apples): HTTP 201 (accumulated_effective_hours: 0.0)
+2. Food Profiles: HTTP 200 (4 profiles returned: rice, oranges)
+3. Session Creation (Oranges): HTTP 201 (accumulated_effective_hours: 0.0)
 4. Session Isolation Check: HTTP 200 (effective_exposure_hours: 0.0, no prior session bleed)
 5. Thermal Stress Ingestion: HTTP 201 (Risk: 49.17%, Category: Moderate, New Alert: True)
 6. Recovery Ingestion: HTTP 201 (Risk: 0.46%, Category: Low, New Alert: False)

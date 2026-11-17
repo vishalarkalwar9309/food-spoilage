@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { FoodProfile, StorageSession } from '../types';
-import { Apple, Leaf, Banana, Layers, Check, Play, AlertCircle } from 'lucide-react';
+import { Wheat, Citrus, Layers, Check, Play, AlertCircle } from 'lucide-react';
 
 interface FoodProfileManagerProps {
   profiles: FoodProfile[];
@@ -19,17 +19,13 @@ export const FoodProfileManager: React.FC<FoodProfileManagerProps> = ({
 }) => {
   const [selectedId, setSelectedId] = useState<string>(activeProfile.id);
 
-  // Icon mapper
+  // Icon mapper for experimental commodities
   const getIcon = (id: string) => {
     switch (id) {
-      case 'tomatoes':
-        return <Apple className="w-5 h-5 text-red-400" />;
-      case 'bananas':
-        return <Banana className="w-5 h-5 text-amber-400" />;
-      case 'apples':
-        return <Apple className="w-5 h-5 text-emerald-400" />;
-      case 'leafy_vegetables':
-        return <Leaf className="w-5 h-5 text-green-400" />;
+      case 'rice':
+        return <Wheat className="w-5 h-5 text-amber-400" />;
+      case 'oranges':
+        return <Citrus className="w-5 h-5 text-orange-400" />;
       default:
         return <Layers className="w-5 h-5 text-cyan-400" />;
     }
@@ -49,7 +45,7 @@ export const FoodProfileManager: React.FC<FoodProfileManagerProps> = ({
             COMMODITY-SPECIFIC STORAGE PROFILES
           </h3>
           <p className="text-xs text-slate-400">
-            Psychrometric envelopes and metabolic baselines adapted to specific post-harvest produce physiology
+            Psychrometric envelopes and metabolic baselines adapted to specific experimental produce physiology
           </p>
         </div>
         <span className="text-xs font-mono text-cyan-400 bg-cyan-950/60 border border-cyan-800/80 px-2.5 py-1 rounded">
@@ -57,14 +53,14 @@ export const FoodProfileManager: React.FC<FoodProfileManagerProps> = ({
         </span>
       </div>
 
-      {/* Grid of 4 Profiles */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      {/* Grid of Exactly Two Profiles: Rice and Oranges */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {profiles.map((p) => {
           const isActive = activeProfile.id === p.id;
           return (
             <div
               key={p.id}
-              className={`rounded-xl border p-4 flex flex-col justify-between transition-all duration-200 ${
+              className={`rounded-xl border p-5 flex flex-col justify-between transition-all duration-200 ${
                 isActive
                   ? 'bg-dark-800/90 border-cyan-500 shadow-md shadow-cyan-950/40 ring-1 ring-cyan-500/50'
                   : 'bg-dark-850/60 border-dark-700 hover:border-dark-600'
@@ -72,22 +68,25 @@ export const FoodProfileManager: React.FC<FoodProfileManagerProps> = ({
             >
               <div>
                 {/* Title & Icon */}
-                <div className="flex items-center justify-between mb-2">
-                  <div className="w-9 h-9 rounded-lg bg-dark-900 border border-dark-700 flex items-center justify-center">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="w-10 h-10 rounded-lg bg-dark-900 border border-dark-700 flex items-center justify-center">
                     {getIcon(p.id)}
                   </div>
                   {isActive ? (
-                    <span className="flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-semibold">
-                      <Check className="w-3 h-3" /> ACTIVE
+                    <span className="flex items-center gap-1 text-[11px] font-mono px-2.5 py-1 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-semibold">
+                      <Check className="w-3.5 h-3.5" /> ACTIVE EXPERIMENT
                     </span>
                   ) : null}
                 </div>
 
-                <h4 className="text-sm font-bold text-white font-mono">{p.name}</h4>
-                <p className="text-[11px] italic text-slate-400 mb-3">{p.scientific_name}</p>
+                <div className="flex items-baseline justify-between">
+                  <h4 className="text-base font-bold text-white font-mono">{p.name}</h4>
+                  <span className="text-[11px] font-mono text-slate-400 uppercase tracking-wider">{p.category}</span>
+                </div>
+                <p className="text-xs italic text-cyan-400/80 mb-3.5">{p.scientific_name}</p>
 
                 {/* Parameters Matrix */}
-                <div className="space-y-1.5 text-xs font-mono border-t border-dark-700/60 pt-2.5">
+                <div className="space-y-2 text-xs font-mono border-t border-dark-700/60 pt-3">
                   <div className="flex justify-between">
                     <span className="text-slate-400">Optimal Temp:</span>
                     <span className="text-cyan-300 font-semibold">{p.temp_min} – {p.temp_max}°C</span>
@@ -106,27 +105,27 @@ export const FoodProfileManager: React.FC<FoodProfileManagerProps> = ({
                   </div>
                 </div>
 
-                <p className="text-[11px] text-slate-400 mt-3 line-clamp-2 leading-relaxed">
+                <p className="text-xs text-slate-400 mt-3.5 leading-relaxed bg-dark-900/60 p-2.5 rounded-lg border border-dark-800">
                   {p.description}
                 </p>
               </div>
 
               {/* Action Button */}
-              <div className="mt-4 pt-3 border-t border-dark-700/50">
+              <div className="mt-5 pt-3 border-t border-dark-700/50">
                 <button
                   onClick={() => handleActivate(p.id)}
                   disabled={isActive || isStartingSession}
-                  className={`w-full py-1.5 px-3 rounded-lg text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition ${
+                  className={`w-full py-2 px-3 rounded-lg text-xs font-mono font-medium flex items-center justify-center gap-1.5 transition ${
                     isActive
                       ? 'bg-dark-700/40 text-slate-400 cursor-default'
                       : 'bg-cyan-600 hover:bg-cyan-500 text-dark-950 font-bold disabled:opacity-50'
                   }`}
                 >
                   {isActive ? (
-                    'Monitoring Profile'
+                    'Active Monitoring Profile'
                   ) : (
                     <>
-                      <Play className="w-3.5 h-3.5" /> Select Profile
+                      <Play className="w-3.5 h-3.5" /> Switch to {p.name}
                     </>
                   )}
                 </button>
@@ -136,11 +135,11 @@ export const FoodProfileManager: React.FC<FoodProfileManagerProps> = ({
         })}
       </div>
 
-      {/* Note */}
-      <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono bg-dark-850 p-2.5 rounded-lg border border-dark-700/60">
-        <AlertCircle className="w-4 h-4 text-slate-400 flex-shrink-0" />
+      {/* Scientific Reference Note */}
+      <div className="flex items-center gap-2 text-[11px] text-slate-400 font-mono bg-dark-850 p-3 rounded-lg border border-dark-700/60">
+        <AlertCircle className="w-4 h-4 text-cyan-400 flex-shrink-0" />
         <span>
-          Note: Psychrometric parameters reflect standard post-harvest recommendations; actual shelf life varies with cultivar, maturity grade, and ambient atmospheric pre-cooling.
+          Scientific Reference: Rice parameters adhere to USDA/FDA Food Code for TCS cooked grains (high vulnerability to Bacillus cereus enterotoxins above 4°C; raw dry grain requires &lt;15°C and &lt;65% RH). Orange parameters adhere to USDA Handbook 66 &amp; UC Davis Postharvest standards for Citrus sinensis.
         </span>
       </div>
     </div>

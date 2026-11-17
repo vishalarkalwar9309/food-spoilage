@@ -103,8 +103,8 @@ dist/assets/index-DafVt4Dh.js   658.89 kB │ gzip: 192.43 kB
 | Endpoint | Method | Test Input / Condition | HTTP Code | Verified Behavior |
 |---|---|---|---|---|
 | `/api/health` | `GET` | Standard poll | `200 OK` | Returns `database: connected`, `system_mode`, and `hardware` status |
-| `/api/food-profiles` | `GET` | List all profiles | `200 OK` | Returns 4 commodity profiles (Tomatoes, Bananas, Apples, Greens) |
-| `/api/sessions/start` | `POST` | `{"food_profile_id":"apples"}` | `201 Created` | Creates session, deactivates older active sessions |
+| `/api/food-profiles` | `GET` | List all profiles | `200 OK` | Returns 2 commodity profiles (Rice, Oranges) |
+| `/api/sessions/start` | `POST` | `{"food_profile_id":"oranges"}` | `201 Created` | Creates session, deactivates older active sessions |
 | `/api/sessions/end` | `POST` | End active batch | `200 OK` | Deactivates active session, records `end_time` |
 | `/api/sensor-data` | `POST` | Valid JSON payload | `201 Created` | Returns composite risk, recommendation, and updates duration |
 | `/api/sensor-data` | `POST` | Missing required fields | `422 Unproc` | Returns descriptive error message |

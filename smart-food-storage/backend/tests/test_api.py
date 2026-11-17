@@ -2,6 +2,7 @@
 test_api.py
 Automated integration tests for Flask REST endpoints.
 Verifies payloads, validation rules, risk calculation endpoints, alert escalation, and simulator operations.
+Updated for experimental commodities: Rice and Oranges.
 """
 
 import os
@@ -51,22 +52,22 @@ def test_food_profiles_endpoint(client):
     res = client.get("/api/food-profiles")
     assert res.status_code == 200
     data = res.get_json()
-    assert data["count"] >= 4
+    assert data["count"] == 2
     names = [p["name"] for p in data["profiles"]]
-    assert "Tomatoes" in names
-    assert "Bananas" in names
+    assert "Rice" in names
+    assert "Oranges" in names
 
 
 def test_session_lifecycle_api(client):
     # Start session
     res = client.post("/api/sessions/start", json={
-        "food_profile_id": "tomatoes",
+        "food_profile_id": "rice",
         "session_name": "API Test Session"
     })
     assert res.status_code == 201
     s_data = res.get_json()
     assert s_data["status"] == "session_started"
-    assert s_data["session"]["food_profile_id"] == "tomatoes"
+    assert s_data["session"]["food_profile_id"] == "rice"
 
     # Verify active session
     res_list = client.get("/api/sessions")
@@ -122,12 +123,12 @@ def test_sensor_data_nan_inf_validation(client):
 
 
 def test_sensor_data_ingestion_and_risk(client):
-    # Start session for tomatoes
-    client.post("/api/sessions/start", json={"food_profile_id": "tomatoes"})
+    # Start session for rice
+    client.post("/api/sessions/start", json={"food_profile_id": "rice"})
 
-    # Send optimal conditions: 13.5°C, 88% RH, 185 ADC gas
+    # Send optimal conditions: 2.5°C, 88% RH, 185 ADC gas
     res = client.post("/api/sensor-data", json={
-        "temperature": 13.5,
+        "temperature": 2.5,
         "humidity": 88.0,
         "gas": 185.0,
         "device_id": "ESP32_PROD",
@@ -146,27 +147,27 @@ def test_sensor_data_ingestion_and_risk(client):
     assert latest_res.status_code == 200
     latest_data = latest_res.get_json()
     assert latest_data["has_data"] is True
-    assert latest_data["reading"]["temperature"] == 13.5
+    assert latest_data["reading"]["temperature"] == 2.5
 
 
 def test_alert_escalation_logic(client):
     """Alert must trigger on risk category increase and not duplicate identical severity cycles."""
-    client.post("/api/sessions/start", json={"food_profile_id": "tomatoes"})
+    client.post("/api/sessions/start", json={"food_profile_id": "rice"})
 
     # 1. Optimal reading (Low risk) -> No alert
-    client.post("/api/sensor-data", json={"temperature": 13.5, "humidity": 88.0, "gas": 180.0, "device_id": "D1"})
+    client.post("/api/sensor-data", json={"temperature": 2.5, "humidity": 88.0, "gas": 180.0, "device_id": "D1"})
     alerts = client.get("/api/alerts").get_json()["alerts"]
     assert len(alerts) == 0
 
     # 2. Elevated reading (High risk) -> Alert triggers
-    res2 = client.post("/api/sensor-data", json={"temperature": 28.0, "humidity": 65.0, "gas": 420.0, "device_id": "D1"})
+    res2 = client.post("/api/sensor-data", json={"temperature": 20.0, "humidity": 65.0, "gas": 420.0, "device_id": "D1"})
     assert res2.get_json()["new_alert"] is not None
 
     alerts2 = client.get("/api/alerts").get_json()["alerts"]
     assert len(alerts2) == 1
 
     # 3. Second reading with SAME high severity -> No duplicate alert
-    res3 = client.post("/api/sensor-data", json={"temperature": 28.2, "humidity": 64.5, "gas": 418.0, "device_id": "D1"})
+    res3 = client.post("/api/sensor-data", json={"temperature": 20.2, "humidity": 64.5, "gas": 418.0, "device_id": "D1"})
     assert res3.get_json()["new_alert"] is None
     alerts3 = client.get("/api/alerts").get_json()["alerts"]
     assert len(alerts3) == 1  # Unchanged count!
@@ -178,46 +179,46 @@ def test_alert_recovery_and_re_escalation(client):
     Verifies that when environmental stress subsides and escalates again,
     the second escalation is not falsely suppressed!
     """
-    client.post("/api/sessions/start", json={"food_profile_id": "tomatoes"})
+    client.post("/api/sessions/start", json={"food_profile_id": "rice"})
 
     # Phase 1: High stress -> Alert #1
-    res1 = client.post("/api/sensor-data", json={"temperature": 28.0, "humidity": 65.0, "gas": 420.0, "device_id": "D1"})
+    res1 = client.post("/api/sensor-data", json={"temperature": 20.0, "humidity": 65.0, "gas": 420.0, "device_id": "D1"})
     assert res1.get_json()["new_alert"] is not None
     assert len(client.get("/api/alerts").get_json()["alerts"]) == 1
 
     # Phase 2: Conditions restored to Low (cooling repaired) -> No alert
-    res2 = client.post("/api/sensor-data", json={"temperature": 13.5, "humidity": 88.0, "gas": 180.0, "device_id": "D1"})
+    res2 = client.post("/api/sensor-data", json={"temperature": 2.5, "humidity": 88.0, "gas": 180.0, "device_id": "D1"})
     assert res2.get_json()["new_alert"] is None
     assert len(client.get("/api/alerts").get_json()["alerts"]) == 1
 
     # Phase 3: Secondary failure -> High stress -> Alert #2 MUST trigger!
-    res3 = client.post("/api/sensor-data", json={"temperature": 29.0, "humidity": 62.0, "gas": 430.0, "device_id": "D1"})
+    res3 = client.post("/api/sensor-data", json={"temperature": 22.0, "humidity": 62.0, "gas": 430.0, "device_id": "D1"})
     assert res3.get_json()["new_alert"] is not None
     assert len(client.get("/api/alerts").get_json()["alerts"]) == 2
 
 
 def test_session_isolation_no_exposure_leak(client):
     """Ensure starting a new session starts with 0.0 effective exposure hours and does not leak prior session hours."""
-    # Session 1: simulate stress and duration
-    s1 = client.post("/api/sessions/start", json={"food_profile_id": "tomatoes", "session_name": "Batch 1"}).get_json()["session"]
+    # Session 1: simulate stress and duration on Rice
+    s1 = client.post("/api/sessions/start", json={"food_profile_id": "rice", "session_name": "Batch 1"}).get_json()["session"]
     client.post("/api/sensor-data", json={
-        "temperature": 28.0,
+        "temperature": 20.0,
         "humidity": 65.0,
         "gas": 400.0,
         "device_id": "D1",
         "timestamp": (datetime.now(timezone.utc) - timedelta(hours=2)).isoformat()
     })
     client.post("/api/sensor-data", json={
-        "temperature": 28.0,
+        "temperature": 20.0,
         "humidity": 65.0,
         "gas": 400.0,
         "device_id": "D1",
         "timestamp": datetime.now(timezone.utc).isoformat()
     })
 
-    # End Session 1 and start Session 2
+    # End Session 1 and start Session 2 for Oranges
     client.post("/api/sessions/end")
-    s2 = client.post("/api/sessions/start", json={"food_profile_id": "bananas", "session_name": "Batch 2"}).get_json()["session"]
+    s2 = client.post("/api/sessions/start", json={"food_profile_id": "oranges", "session_name": "Batch 2"}).get_json()["session"]
 
     latest = client.get("/api/latest").get_json()
     # Active session must have 0 accumulated hours
@@ -247,7 +248,7 @@ def test_simulator_controls_and_step(client):
     assert res_step.status_code == 200
     step_data = res_step.get_json()
     assert step_data["source"] == "simulator"
-    assert step_data["temperature"] > 15.0  # In high_temp mode, temperature is elevated
+    assert step_data["temperature"] > 10.0  # In high_temp mode, temperature is elevated
 
     # Start and stop background simulator
     res_start = client.post("/api/simulator/start", json={"interval_seconds": 1.0})
@@ -270,9 +271,9 @@ def test_history_hours_filtering(client):
     recent_time = (now - timedelta(minutes=10)).isoformat()
 
     # Old reading (3 hours ago)
-    client.post("/api/sensor-data", json={"temperature": 13.0, "humidity": 88.0, "gas": 180.0, "device_id": "D1", "timestamp": old_time})
+    client.post("/api/sensor-data", json={"temperature": 2.0, "humidity": 88.0, "gas": 180.0, "device_id": "D1", "timestamp": old_time})
     # Recent reading (10 min ago)
-    client.post("/api/sensor-data", json={"temperature": 13.5, "humidity": 88.0, "gas": 185.0, "device_id": "D1", "timestamp": recent_time})
+    client.post("/api/sensor-data", json={"temperature": 2.5, "humidity": 88.0, "gas": 185.0, "device_id": "D1", "timestamp": recent_time})
 
     # Range 1h should only return the recent reading (1 item)
     hist_1h = client.get("/api/history?range=1h").get_json()
@@ -318,7 +319,7 @@ def test_esp32_telemetry_switches_mode_and_stops_simulator(client):
 
     # 2. Ingest packet from physical ESP32
     esp32_payload = {
-        "temperature": 14.2,
+        "temperature": 3.2,
         "humidity": 88.5,
         "gas": 210.0,
         "device_id": "ESP32-UNIT-TEST",
@@ -337,4 +338,3 @@ def test_esp32_telemetry_switches_mode_and_stops_simulator(client):
     assert latest["hardware"]["status"] == "online"
     assert latest["hardware"]["device_id"] == "ESP32-UNIT-TEST"
     assert latest["simulator"]["is_running"] is False
-

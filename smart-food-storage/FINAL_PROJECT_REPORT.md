@@ -40,7 +40,7 @@
 |                                                                                                         |
 |  [ Mathematical Spoilage Risk Engine (risk_engine.py) ]                                                 |
 |    ├── Composite Equation: R = (0.30 * Ts) + (0.25 * Hs) + (0.25 * Gs) + (0.20 * Ds)                   |
-|    ├── Commodity Profiles: Tomatoes, Bananas, Apples, Leafy Greens                                      |
+|    ├── Commodity Profiles: Rice, Oranges (Experimental Setup)                                      |
 |    └── Exposure Duration Acceleration Model: E_penalty(t) = 1.0 + α * (max(Ts, Hs)/100)                |
 |                                                                                                         |
 |  [ Database Persistence Layer (database.py) ]                                                           |

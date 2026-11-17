@@ -70,8 +70,8 @@ The Smart Food Storage Spoilage Predictor backend provides a stateless RESTful i
   "device_id": "ESP32-FOOD-001",
   "timestamp": "2026-11-15T10:15:30+00:00",
   "food_profile": {
-    "id": "tomatoes",
-    "name": "Tomatoes",
+    "id": "rice",
+    "name": "Rice",
     "temp_min": 12.0,
     "temp_max": 15.0,
     "humidity_min": 85.0,
@@ -93,7 +93,7 @@ The Smart Food Storage Spoilage Predictor backend provides a stateless RESTful i
   },
   "session": {
     "session_id": 3,
-    "session_name": "Tomatoes Storage Batch A"
+    "session_name": "Rice Storage Chamber Batch A"
   },
   "new_alert": null
 }
@@ -150,17 +150,17 @@ The Smart Food Storage Spoilage Predictor backend provides a stateless RESTful i
   },
   "active_session": {
     "id": 3,
-    "session_name": "Tomatoes Storage Batch A",
-    "food_profile_id": "tomatoes",
-    "food_name": "Tomatoes",
+    "session_name": "Rice Storage Chamber Batch A",
+    "food_profile_id": "rice",
+    "food_name": "Rice",
     "start_time": "2026-11-15T08:00:00+00:00",
     "is_active": 1,
     "accumulated_effective_hours": 61.2,
     "total_readings_count": 48
   },
   "active_profile": {
-    "id": "tomatoes",
-    "name": "Tomatoes",
+    "id": "rice",
+    "name": "Rice",
     "temp_min": 12.0,
     "temp_max": 15.0,
     "humidity_min": 85.0,
@@ -205,7 +205,7 @@ The Smart Food Storage Spoilage Predictor backend provides a stateless RESTful i
       "gas_score": 6.8,
       "duration_score": 12.5,
       "risk_category": "Low",
-      "food_name": "Tomatoes"
+      "food_name": "Rice"
     }
   ]
 }
@@ -234,7 +234,7 @@ The Smart Food Storage Spoilage Predictor backend provides a stateless RESTful i
     "lan_ip": "192.168.0.101",
     "lan_endpoint": "http://192.168.0.101:5000/api/sensor-data"
   },
-  "active_session": { "id": 3, "session_name": "Tomatoes Batch A" },
+  "active_session": { "id": 3, "session_name": "Rice Storage Batch A" },
   "simulator": {
     "is_running": false,
     "current_mode": "normal",
@@ -285,9 +285,9 @@ The Smart Food Storage Spoilage Predictor backend provides a stateless RESTful i
 {
   "active_session": {
     "id": 3,
-    "session_name": "Tomatoes Batch A",
-    "food_profile_id": "tomatoes",
-    "food_name": "Tomatoes",
+    "session_name": "Rice Storage Batch A",
+    "food_profile_id": "rice",
+    "food_name": "Rice",
     "start_time": "2026-11-15T08:00:00+00:00",
     "is_active": 1,
     "accumulated_effective_hours": 12.5,
@@ -303,8 +303,8 @@ The Smart Food Storage Spoilage Predictor backend provides a stateless RESTful i
 * **Request Body:**
 ```json
 {
-  "food_profile_id": "bananas",
-  "session_name": "Organic Cavendish Bananas Batch 1"
+  "food_profile_id": "oranges",
+  "session_name": "Fresh Navel Oranges Cold Room Batch 1"
 }
 ```
 * **Success Response (`201 Created`):**
@@ -313,8 +313,8 @@ The Smart Food Storage Spoilage Predictor backend provides a stateless RESTful i
   "status": "started",
   "session": {
     "id": 4,
-    "session_name": "Organic Cavendish Bananas Batch 1",
-    "food_profile_id": "bananas",
+    "session_name": "Fresh Navel Oranges Cold Room Batch 1",
+    "food_profile_id": "oranges",
     "start_time": "2026-11-15T10:30:00+00:00",
     "is_active": 1,
     "accumulated_effective_hours": 0.0,

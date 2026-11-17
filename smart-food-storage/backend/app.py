@@ -104,13 +104,13 @@ def get_hardware_status() -> dict:
 
 
 def get_current_profile_dict() -> dict:
-    """Helper to get current active session profile or fallback to tomatoes."""
+    """Helper to get current active session profile or fallback to rice."""
     active_session = database.get_active_session(DB_PATH)
     if active_session and active_session.get("food_profile_id"):
         prof = database.get_food_profile(active_session["food_profile_id"], DB_PATH)
         if prof:
             return prof
-    return get_profile_by_id("tomatoes") or list(get_default_profiles().values())[0]
+    return get_profile_by_id("rice") or list(get_default_profiles().values())[0]
 
 
 def process_sensor_reading(payload: dict) -> dict:
@@ -538,7 +538,7 @@ def sessions_list():
 def start_storage_session():
     """
     Start a new storage session with a selected food profile.
-    Payload: { food_profile_id: "tomatoes", session_name?: "Tomatoes Batch #1" }
+    Payload: { food_profile_id: "rice", session_name?: "Rice Chamber Batch #1" }
     """
     payload = request.get_json() or {}
     profile_id = payload.get("food_profile_id")

@@ -32,7 +32,7 @@ This mode demonstrates 100% of application capabilities using the built-in senso
 ---
 
 ### Step 1: Baseline Storage Conditions (Optimal Envelope)
-1. In the **Commodity Profile Management** section, ensure **Tomatoes** is selected (or click "Select Profile").
+1. In the **Commodity Profile Management** section, ensure **Rice** is selected (or click "Select Profile").
 2. In the **Hardware Emulation & Sensor Simulator** dock, click **1. Normal Conditions**.
 3. Click **Step Once** (or click **Start Auto-Stream (3.5s)**).
 4. **Point out to Evaluators:**
@@ -114,8 +114,8 @@ This mode demonstrates 100% of application capabilities using the built-in senso
 ---
 
 ### Step 8: Multi-Crop Profile Switching & Session Isolation
-1. In **Commodity Profile Management**, select **Apples** ($1\text{--}4^\circ\text{C}$).
-2. Click **Start New Storage Session** with profile set to Apples.
+1. In **Commodity Profile Management**, select **Oranges** (\text{--}8^\circ\text{C}$).
+2. Click **Start New Storage Session** with profile set to Oranges.
 3. **Point out to Evaluators:**
    - All charts and target reference envelopes dynamically adjust: the optimal temperature window changes to $[1, 4]^\circ\text{C}$, and shelf life updates to 720 hours (30 days).
    - Past historical data from previous sessions remains preserved in SQLite without corruption.

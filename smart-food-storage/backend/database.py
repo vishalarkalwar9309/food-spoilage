@@ -127,27 +127,63 @@ def init_db(db_path: str = DEFAULT_DB_PATH) -> None:
     cur.execute("CREATE INDEX IF NOT EXISTS idx_sessions_active ON storage_sessions(is_active);")
     cur.execute("CREATE INDEX IF NOT EXISTS idx_alerts_timestamp ON alerts(timestamp);")
 
-    # Seed predefined food profiles if table is empty
-    cur.execute("SELECT COUNT(*) as cnt FROM food_profiles;")
-    row = cur.fetchone()
-    if row and row["cnt"] == 0:
-        now_iso = datetime.now(timezone.utc).isoformat()
-        for p in DEFAULT_FOOD_PROFILES.values():
-            cur.execute("""
-            INSERT INTO food_profiles (
-                id, name, scientific_name, category, temp_min, temp_max, temp_crit, temp_freeze,
-                humidity_min, humidity_max, ideal_shelf_life_hours, gas_baseline, gas_threshold,
-                weight_temp, weight_humidity, weight_gas, weight_duration, stress_multiplier_alpha,
-                description, icon, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-            """, (
-                p["id"], p["name"], p.get("scientific_name", ""), p.get("category", ""),
-                p["temp_min"], p["temp_max"], p["temp_crit"], p["temp_freeze"],
-                p["humidity_min"], p["humidity_max"], p["ideal_shelf_life_hours"],
-                p["gas_baseline"], p["gas_threshold"], p["weight_temp"], p["weight_humidity"],
-                p["weight_gas"], p["weight_duration"], p["stress_multiplier_alpha"],
-                p.get("description", ""), p.get("icon", ""), now_iso
-            ))
+    # Seed / synchronize predefined food profiles
+    now_iso = datetime.now(timezone.utc).isoformat()
+    for p in DEFAULT_FOOD_PROFILES.values():
+        cur.execute("""
+        INSERT INTO food_profiles (
+            id, name, scientific_name, category, temp_min, temp_max, temp_crit, temp_freeze,
+            humidity_min, humidity_max, ideal_shelf_life_hours, gas_baseline, gas_threshold,
+            weight_temp, weight_humidity, weight_gas, weight_duration, stress_multiplier_alpha,
+            description, icon, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+            name = excluded.name,
+            scientific_name = excluded.scientific_name,
+            category = excluded.category,
+            temp_min = excluded.temp_min,
+            temp_max = excluded.temp_max,
+            temp_crit = excluded.temp_crit,
+            temp_freeze = excluded.temp_freeze,
+            humidity_min = excluded.humidity_min,
+            humidity_max = excluded.humidity_max,
+            ideal_shelf_life_hours = excluded.ideal_shelf_life_hours,
+            gas_baseline = excluded.gas_baseline,
+            gas_threshold = excluded.gas_threshold,
+            weight_temp = excluded.weight_temp,
+            weight_humidity = excluded.weight_humidity,
+            weight_gas = excluded.weight_gas,
+            weight_duration = excluded.weight_duration,
+            stress_multiplier_alpha = excluded.stress_multiplier_alpha,
+            description = excluded.description,
+            icon = excluded.icon;
+        """, (
+            p["id"], p["name"], p.get("scientific_name", ""), p.get("category", ""),
+            p["temp_min"], p["temp_max"], p["temp_crit"], p["temp_freeze"],
+            p["humidity_min"], p["humidity_max"], p["ideal_shelf_life_hours"],
+            p["gas_baseline"], p["gas_threshold"], p["weight_temp"], p["weight_humidity"],
+            p["weight_gas"], p["weight_duration"], p["stress_multiplier_alpha"],
+            p.get("description", ""), p.get("icon", ""), now_iso
+        ))
+
+    valid_ids = tuple(DEFAULT_FOOD_PROFILES.keys())
+    # Remap obsolete session & risk references to preserve FK integrity before removing old profiles
+    cur.execute(f"UPDATE storage_sessions SET food_profile_id = 'rice' WHERE food_profile_id NOT IN ({','.join(['?']*len(valid_ids))});", valid_ids)
+    cur.execute(f"UPDATE risk_history SET food_profile_id = 'rice' WHERE food_profile_id NOT IN ({','.join(['?']*len(valid_ids))});", valid_ids)
+
+    # Remove any obsolete profiles not in DEFAULT_FOOD_PROFILES
+    cur.execute(f"DELETE FROM food_profiles WHERE id NOT IN ({','.join(['?']*len(valid_ids))});", valid_ids)
+
+    # Ensure there is an active session for the default profile (Rice)
+    cur.execute("SELECT id, food_profile_id FROM storage_sessions WHERE is_active = 1;")
+    active_row = cur.fetchone()
+    if not active_row:
+        cur.execute("""
+            INSERT INTO storage_sessions (
+                session_name, food_profile_id, start_time, is_active,
+                last_reading_time, accumulated_effective_hours, total_readings_count
+            ) VALUES (?, 'rice', ?, 1, NULL, 0.0, 0);
+        """, ("Rice Storage Chamber Batch #1", now_iso))
 
     conn.commit()
     conn.close()
@@ -239,9 +275,9 @@ def get_all_sessions(limit: int = 50, db_path: str = DEFAULT_DB_PATH) -> List[Di
     conn = get_db_connection(db_path)
     cur = conn.cursor()
     cur.execute("""
-        SELECT s.*, p.name as food_name
+        SELECT s.*, COALESCE(p.name, s.food_profile_id) as food_name
         FROM storage_sessions s
-        JOIN food_profiles p ON s.food_profile_id = p.id
+        LEFT JOIN food_profiles p ON s.food_profile_id = p.id
         ORDER BY s.id DESC LIMIT ?;
     """, (limit,))
     rows = [dict(r) for r in cur.fetchall()]
